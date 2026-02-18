@@ -19,34 +19,29 @@ export interface RelayDefinition {
 }
 
 export const RELAY_CATALOG: RelayDefinition[] = [
-  // ── gpio4–gpio6 ────────────────────────────────────────────────────
   { id: "entrada",         displayName: "Entrada",          pin: "gpio4"  },
-  { id: "cocina",          displayName: "Cocina",           pin: "gpio5"  },
+  { id: "escalas",          displayName: "Escalas",           pin: "gpio5"  },
   { id: "sala",            displayName: "Sala",             pin: "gpio6"  },
-  // ── gpio7–gpio11 (pines expandidos) ────────────────────────────────
-  { id: "patio",           displayName: "Patio",            pin: "gpio7"  },
+  { id: "reflectores",           displayName: "Reflectores",            pin: "gpio7"  },
   { id: "estudio",         displayName: "Estudio",          pin: "gpio8"  },
   { id: "bodega",          displayName: "Bodega",           pin: "gpio9"  },
-  { id: "cuarto-servicio", displayName: "Cuarto Servicio",  pin: "gpio10" },
+  { id: "corredorese", displayName: "Corredores 2",  pin: "gpio10" },
   { id: "porton",          displayName: "Portón",           pin: "gpio11" },
-  // ── gpio12–gpio13 ──────────────────────────────────────────────────
   { id: "comedor",         displayName: "Comedor",          pin: "gpio12" },
   { id: "dormitorio-1",    displayName: "Dormitorio 1",     pin: "gpio13" },
-  // ── gpio14–gpio15 (pines expandidos) ───────────────────────────────
   { id: "alarma",          displayName: "Alarma",           pin: "gpio14" },
   { id: "bomba-agua",      displayName: "Bomba Agua",       pin: "gpio15" },
-  // ── gpio16–gpio27 ──────────────────────────────────────────────────
   { id: "dormitorio-2",    displayName: "Dormitorio 2",     pin: "gpio16" },
   { id: "dormitorio-3",    displayName: "Dormitorio 3",     pin: "gpio17" },
-  { id: "bano-1",          displayName: "Baño 1",           pin: "gpio18" },
-  { id: "bano-2",          displayName: "Baño 2",           pin: "gpio19" },
+  { id: "habitacion",          displayName: "Habitacion",           pin: "gpio18" },
+  { id: "corredores",          displayName: "Corredores",           pin: "gpio19" },
   { id: "pasillo",         displayName: "Pasillo",          pin: "gpio20" },
   { id: "lavanderia",      displayName: "Lavandería",       pin: "gpio21" },
   { id: "garaje",          displayName: "Garaje",           pin: "gpio22" },
-  { id: "luz-garaje",      displayName: "Luz Garaje",       pin: "gpio23" },
-  { id: "jardin",          displayName: "Jardín",           pin: "gpio24" },
+  { id: "sala",      displayName: "Sala",       pin: "gpio23" },
+  { id: "hab-noche",          displayName: "Hab Noche",           pin: "gpio24" },
   { id: "exterior-frente", displayName: "Exterior Frente",  pin: "gpio25" },
-  { id: "exterior-fondo",  displayName: "Exterior Fondo",   pin: "gpio26" },
+  { id: "cocina",          displayName: "Cocina",   pin: "gpio26" },
   { id: "terraza",         displayName: "Terraza",          pin: "gpio27" },
 ];
 
