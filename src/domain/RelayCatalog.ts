@@ -19,30 +19,32 @@ export interface RelayDefinition {
 }
 
 export const RELAY_CATALOG: RelayDefinition[] = [
+  { id: "escalas", displayName: "Escalas", pin: "gpio5" },
+  { id: "reflectores", displayName: "Reflectores", pin: "gpio7" },
+  { id: "habitacion", displayName: "Habitacion", pin: "gpio18" },
+  { id: "corredores", displayName: "Corredores", pin: "gpio19" },
+  { id: "estudio", displayName: "Estudio", pin: "gpio8" },
+  { id: "corredorese", displayName: "Corredores 2", pin: "gpio10" },
+  { id: "sala", displayName: "Sala", pin: "gpio23" },
+  { id: "hab-noche", displayName: "Hab Noche", pin: "gpio24" },
+  { id: "cocina", displayName: "Cocina", pin: "gpio26" },
+
   { id: "entrada",         displayName: "Entrada",          pin: "gpio4"  },
-  { id: "escalas",          displayName: "Escalas",           pin: "gpio5"  },
-  { id: "sala",            displayName: "Sala",             pin: "gpio6"  },
-  { id: "reflectores",           displayName: "Reflectores",            pin: "gpio7"  },
-  { id: "estudio",         displayName: "Estudio",          pin: "gpio8"  },
-  { id: "bodega",          displayName: "Bodega",           pin: "gpio9"  },
-  { id: "corredorese", displayName: "Corredores 2",  pin: "gpio10" },
+  { id: "sala",            displayName: "Sala",             pin: "gpio6"  }, 
+  { id: "bodega",          displayName: "Bodega",           pin: "gpio9"  }, 
   { id: "porton",          displayName: "Portón",           pin: "gpio11" },
   { id: "comedor",         displayName: "Comedor",          pin: "gpio12" },
   { id: "dormitorio-1",    displayName: "Dormitorio 1",     pin: "gpio13" },
   { id: "alarma",          displayName: "Alarma",           pin: "gpio14" },
   { id: "bomba-agua",      displayName: "Bomba Agua",       pin: "gpio15" },
   { id: "dormitorio-2",    displayName: "Dormitorio 2",     pin: "gpio16" },
-  { id: "dormitorio-3",    displayName: "Dormitorio 3",     pin: "gpio17" },
-  { id: "habitacion",          displayName: "Habitacion",           pin: "gpio18" },
-  { id: "corredores",          displayName: "Corredores",           pin: "gpio19" },
+  { id: "dormitorio-3",    displayName: "Dormitorio 3",     pin: "gpio17" }, 
   { id: "pasillo",         displayName: "Pasillo",          pin: "gpio20" },
   { id: "lavanderia",      displayName: "Lavandería",       pin: "gpio21" },
-  { id: "garaje",          displayName: "Garaje",           pin: "gpio22" },
-  { id: "sala",      displayName: "Sala",       pin: "gpio23" },
-  { id: "hab-noche",          displayName: "Hab Noche",           pin: "gpio24" },
-  { id: "exterior-frente", displayName: "Exterior Frente",  pin: "gpio25" },
-  { id: "cocina",          displayName: "Cocina",   pin: "gpio26" },
-  { id: "terraza",         displayName: "Terraza",          pin: "gpio27" },
+  { id: "garaje",          displayName: "Garaje",           pin: "gpio22" }, 
+  { id: "exterior-frente", displayName: "Exterior Frente",  pin: "gpio25" }, 
+  { id: "terraza",         displayName: "Terraza",          pin: "gpio27" }, 
+   
 ];
 
 /** Busca un relé por su id lógico. Devuelve undefined si no existe. */
