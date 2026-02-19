@@ -5,9 +5,13 @@
  *
  * Flujo para setState(id, state):
  *   1. Validar que el relé existe en el catálogo
- *   2. Llamar a RaspberryRelayClient → ejecuta el cambio físico en GPIO
- *   3. Actualizar RelayStateStore → nueva verdad en memoria
+ *   2. Publicar comando MQTT → alice/relay/{id}/set  (GPIO suscrito)
+ *   3. Actualizar RelayStateStore de forma optimista
  *   4. Notificar a RealtimeHub → todos los clientes WS se enteran
+ *
+ * La confirmación real llega por MQTT (alice/relay/{id}/state ← GPIO)
+ * y es procesada por MqttBus, que actualiza el store y re-difunde
+ * si el estado real difiere del optimista.
  *
  * No contiene lógica HTTP ni de WebSocket directamente.
  * Se exporta como singleton `relayService`.
@@ -15,8 +19,8 @@
 
 import { findRelay, RELAY_CATALOG } from "../domain/RelayCatalog";
 import { relayStateStore } from "./RelayStateStore";
-import { raspberryRelayClient } from "./RaspberryRelayClient";
 import { realtimeHub } from "./RealtimeHub";
+import { mqttBus } from "./MqttBus";
 
 class RelayService {
   // ── Casos de uso principales ──────────────────────────────────────────────
@@ -33,7 +37,8 @@ class RelayService {
 
   /**
    * Cambia el estado de un relé.
-   * Lanza Error si el id no existe en el catálogo o si la Raspberry falla.
+   * Publica el comando via MQTT y actualiza optimistamente el estado local.
+   * Lanza Error si el id no existe en el catálogo.
    */
   async setState(id: string, state: boolean): Promise<void> {
     const relay = findRelay(id);
@@ -41,29 +46,31 @@ class RelayService {
       throw new Error(`Relay "${id}" not found in catalog`);
     }
 
-    // 1. Ejecutar cambio físico en la Raspberry
-    await raspberryRelayClient.setState(relay.pin, state);
+    // 1. Publicar comando al GPIO via MQTT (pin incluido en payload)
+    mqttBus.publishCommand(relay.id, relay.pin, state);
 
-    // 2. Actualizar estado local
+    // 2. Actualización optimista del estado local
     relayStateStore.set(id, state);
 
-    // 3. Notificar a todos los clientes WS
+    // 3. Notificar a todos los clientes WS (update optimista inmediato)
     realtimeHub.broadcastRelayUpdate(id, state);
 
-    console.log(`[RelayService] ${relay.displayName} (${relay.pin}) → ${state ? "ON" : "OFF"}`);
+    console.log(`[RelayService] ${relay.displayName} (${relay.pin}) → ${state ? "ON" : "OFF"} [via MQTT]`);
   }
 
   /**
    * Enciende o apaga todos los relés a la vez.
-   * Llama a la Raspberry, actualiza el store y difunde un snapshot.
+   * Publica comando MQTT bulk, actualiza store y difunde snapshot.
    */
   async setAll(state: boolean): Promise<void> {
-    await raspberryRelayClient.setAll(state);
+    mqttBus.publishAll(state);
+
     for (const relay of RELAY_CATALOG) {
       relayStateStore.set(relay.id, state);
     }
     realtimeHub.broadcastSnapshot(relayStateStore.getAll());
-    console.log(`[RelayService] setAll → ${state ? "ON" : "OFF"}`);
+
+    console.log(`[RelayService] setAll → ${state ? "ON" : "OFF"} [via MQTT]`);
   }
 
   // ── Consultas ─────────────────────────────────────────────────────────────
