@@ -30,7 +30,7 @@ export const RELAY_CATALOG: RelayDefinition[] = [
   { id: "cocina", displayName: "Cocina", pin: "gpio26" },
 
   { id: "entrada",         displayName: "Entrada",          pin: "gpio4"  },
-  { id: "sala",            displayName: "Sala",             pin: "gpio6"  }, 
+  { id: "si",            displayName: "si",             pin: "gpio6"  }, 
   { id: "bodega",          displayName: "Bodega",           pin: "gpio9"  }, 
   { id: "porton",          displayName: "Portón",           pin: "gpio11" },
   { id: "comedor",         displayName: "Comedor",          pin: "gpio12" },
