@@ -4,9 +4,10 @@
  * Crea el servidor HTTP de Express, monta el WebSocket sobre el mismo
  * puerto, conecta al broker MQTT y arranca todo en un solo proceso.
  *
- * Puerto: variable PORT en .env (default 3001)
- * MQTT:   variable MQTT_URL en .env (default mqtt://localhost:1883)
- * FRONTEND_URL: URL del frontend Next.js para cargar horarios (default http://localhost:3000)
+ * Variables de entorno:
+ *   PORT         (default 3001)
+ *   MQTT_URL     (default mqtt://localhost:1883)
+ *   FRONTEND_URL — URL de Next.js, usada por AliceApiClient (default http://localhost:3000)
  */
 
 import "dotenv/config";
@@ -14,14 +15,18 @@ import http from "http";
 import express from "express";
 import { realtimeHub } from "./services/RealtimeHub";
 import { mqttBus } from "./services/MqttBus";
+import { initAliceApiClient } from "./services/AliceApiClient";
 import { schedulerService } from "./services/SchedulerService";
 import relayRouter from "./api/RelayController";
 import scheduleRouter from "./api/ScheduleController";
 
-const PORT           = Number(process.env.PORT ?? 3001);
-const MQTT_URL       = process.env.MQTT_URL       ?? "mqtt://localhost:1883";
-const MQTT_CLIENT_ID = process.env.MQTT_CLIENT_ID ?? "alice-gateway";
-const FRONTEND_URL   = process.env.FRONTEND_URL   ?? "http://localhost:3000";
+const PORT           = Number(process.env.PORT           ?? 3001);
+const MQTT_URL       =        process.env.MQTT_URL        ?? "mqtt://localhost:1883";
+const MQTT_CLIENT_ID =        process.env.MQTT_CLIENT_ID ?? "alice-gateway";
+const FRONTEND_URL   =        process.env.FRONTEND_URL   ?? "http://localhost:3000";
+
+// ── AliceApiClient (debe inicializarse antes que SchedulerService) ─────────────
+initAliceApiClient(FRONTEND_URL);
 
 // ── Express ───────────────────────────────────────────────────────────────────
 const app = express();
@@ -37,27 +42,25 @@ app.use((_req, res, next) => {
 });
 
 // Rutas
-app.use("/api/relays", relayRouter);
+app.use("/api/relays",    relayRouter);
 app.use("/api/schedules", scheduleRouter);
 
 // Health check
 app.get("/health", (_req, res) => {
   res.json({
-    ok: true,
-    ws_clients: realtimeHub.connectedClients,
+    ok:             true,
+    ws_clients:     realtimeHub.connectedClients,
     mqtt_connected: mqttBus.isConnected,
     scheduler_jobs: schedulerService.count,
-    uptime: process.uptime(),
+    uptime:         process.uptime(),
   });
 });
 
 // ── HTTP Server compartido con WebSocket ──────────────────────────────────────
 const server = http.createServer(app);
-
-// Montar WebSocket sobre el mismo server (mismo puerto)
 realtimeHub.attach(server);
 
-// ── MQTT Bus ───────────────────────────────────────────────────────────────────
+// ── MQTT ───────────────────────────────────────────────────────────────────────
 mqttBus.connect(MQTT_URL, MQTT_CLIENT_ID);
 
 // ── Arranque ───────────────────────────────────────────────────────────────────
@@ -70,9 +73,7 @@ server.listen(PORT, () => {
   console.log(`  Frontend →  ${FRONTEND_URL}`);
   console.log("─────────────────────────────────────────");
 
-  // Inicializar scheduler y cargar horarios desde el frontend
   // Delay de 3s para dar tiempo al frontend de estar listo
-  schedulerService.init(FRONTEND_URL);
   setTimeout(() => {
     schedulerService.reload().catch((err) => {
       console.error("[Scheduler] Error en carga inicial:", err);
