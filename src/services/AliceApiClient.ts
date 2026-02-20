@@ -53,7 +53,7 @@ class AliceApiClient {
    */
   async getSchedules(): Promise<ScheduleDto[]> {
     const { data } = await this.http.get<GetSchedulesResponse>(
-      "/api/alice/schedules"
+      "/api/schedules"
     );
     return data.schedules;
   }
