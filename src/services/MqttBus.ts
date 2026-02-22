@@ -30,15 +30,19 @@ import { relayStateStore } from "./RelayStateStore";
 import { realtimeHub } from "./RealtimeHub";
 import { RELAY_CATALOG } from "../domain/RelayCatalog";
 
-const TOPIC_CMD      = (id: string) => `alice/relay/${id}/set`;
-const TOPIC_ALL_CMD  = "alice/relay/all/set";
+const TOPIC_CMD           = (id: string) => `alice/relay/${id}/set`;
+const TOPIC_ALL_CMD       = "alice/relay/all/set";
 const TOPIC_STATE_SUB     = "alice/relay/+/state";
 const TOPIC_ALL_STATE_SUB = "alice/relay/all/state";
-const TOPIC_STATUS   = "alice/system/gateway/status";
+const TOPIC_STATUS        = "alice/system/gateway/status";
+const TOPIC_FRIGATE_SUB   = "frigate/events";
+
+type FrigateHandler = (topic: string, payload: Buffer) => void;
 
 class MqttBus {
   private client: MqttClient | null = null;
   private brokerUrl = "";
+  private _frigateHandlers: FrigateHandler[] = [];
 
   /**
    * Conecta al broker MQTT e inicia las suscripciones.
@@ -64,13 +68,13 @@ class MqttBus {
       console.log(`[MQTT] Connected → ${brokerUrl}`);
       this.client!.publish(TOPIC_STATUS, "online", { retain: true, qos: 1 });
 
-      // Suscribirse a confirmaciones de estado del GPIO
+      // Suscribirse a confirmaciones de estado del GPIO + eventos Frigate
       this.client!.subscribe(
-        [TOPIC_STATE_SUB, TOPIC_ALL_STATE_SUB],
+        [TOPIC_STATE_SUB, TOPIC_ALL_STATE_SUB, TOPIC_FRIGATE_SUB],
         { qos: 1 },
         (err) => {
           if (err) console.error("[MQTT] Subscribe error:", err.message);
-          else console.log(`[MQTT] Subscribed → ${TOPIC_STATE_SUB}  +  ${TOPIC_ALL_STATE_SUB}`);
+          else console.log(`[MQTT] Subscribed → relay states + frigate/events`);
         }
       );
     });
@@ -112,6 +116,13 @@ class MqttBus {
     console.log(`[MQTT] Cmd → ${TOPIC_ALL_CMD}: ${payload}`);
   }
 
+  // ── Frigate ───────────────────────────────────────────────────────────────
+
+  /** Registra un handler para mensajes de Frigate (frigate/events). */
+  addFrigateHandler(fn: FrigateHandler): void {
+    this._frigateHandlers.push(fn);
+  }
+
   // ── Estado ────────────────────────────────────────────────────────────────
 
   /** true si el cliente MQTT está conectado al broker. */
@@ -128,6 +139,12 @@ class MqttBus {
   private _handleIncoming(topic: string, payloadBuf: Buffer): void {
     const raw = payloadBuf.toString("utf-8");
     console.log(`[MQTT] Incoming ← ${topic}: ${raw}`);
+
+    // Despachar a handlers de Frigate
+    if (topic.startsWith("frigate/")) {
+      for (const fn of this._frigateHandlers) fn(topic, payloadBuf);
+      return;
+    }
 
     try {
       const data = JSON.parse(raw) as { state: boolean };

@@ -12,6 +12,8 @@
  */
 
 import axios, { AxiosInstance } from "axios";
+import type { FrigateDetectionRule } from "../config/frigateRules";
+export type { FrigateDetectionRule };
 
 // ── DTOs (espejo de los tipos definidos en Next.js) ────────────────────────────
 
@@ -33,6 +35,7 @@ interface LogRelayEventRequest {
   action:  "on" | "off";
   source?: string;
 }
+
 
 // ── Cliente ────────────────────────────────────────────────────────────────────
 
@@ -56,6 +59,21 @@ class AliceApiClient {
       "/api/schedules"
     );
     return data.schedules;
+  }
+
+  /**
+   * Lee la regla de detección Frigate desde la BD (via Next.js API).
+   * Retorna null si el endpoint no está disponible.
+   */
+  async getFrigateRule(): Promise<FrigateDetectionRule | null> {
+    try {
+      const { data } = await this.http.get<{ rule: FrigateDetectionRule }>(
+        "/api/automations/frigate-detection"
+      );
+      return data.rule;
+    } catch {
+      return null;
+    }
   }
 
   /**

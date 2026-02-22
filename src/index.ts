@@ -17,6 +17,7 @@ import { realtimeHub } from "./services/RealtimeHub";
 import { mqttBus } from "./services/MqttBus";
 import { initAliceApiClient } from "./services/AliceApiClient";
 import { schedulerService } from "./services/SchedulerService";
+import { frigateService } from "./services/FrigateService";
 import relayRouter from "./api/RelayController";
 import scheduleRouter from "./api/ScheduleController";
 
@@ -62,6 +63,7 @@ realtimeHub.attach(server);
 
 // ── MQTT ───────────────────────────────────────────────────────────────────────
 mqttBus.connect(MQTT_URL, MQTT_CLIENT_ID);
+frigateService.init();
 
 // ── Arranque ───────────────────────────────────────────────────────────────────
 server.listen(PORT, () => {
