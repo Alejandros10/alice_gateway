@@ -77,6 +77,35 @@ class AliceApiClient {
   }
 
   /**
+   * Lee el modo de la casa ("home" | "away") desde la BD (via Next.js API).
+   * Retorna "home" si el endpoint no está disponible.
+   */
+  async getHouseMode(): Promise<"home" | "away"> {
+    try {
+      const { data } = await this.http.get<{ mode: "home" | "away" }>(
+        "/api/settings/house-mode"
+      );
+      return data.mode ?? "home";
+    } catch {
+      return "home";
+    }
+  }
+
+  /**
+   * Obtiene la lista de emails de notificación habilitados desde la BD.
+   */
+  async getNotificationEmails(): Promise<string[]> {
+    try {
+      const { data } = await this.http.get<{ emails: { email: string; enabled: boolean }[] }>(
+        "/api/settings/notification-emails"
+      );
+      return (data.emails ?? []).filter((e) => e.enabled).map((e) => e.email);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * Registra en BD la ejecución de un horario.
    * Fire-and-forget: los errores se loguean pero no interrumpen el flujo.
    */

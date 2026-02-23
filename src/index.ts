@@ -18,6 +18,7 @@ import { mqttBus } from "./services/MqttBus";
 import { initAliceApiClient } from "./services/AliceApiClient";
 import { schedulerService } from "./services/SchedulerService";
 import { frigateService } from "./services/FrigateService";
+import { notifierClient } from "./services/NotifierClient";
 import relayRouter from "./api/RelayController";
 import scheduleRouter from "./api/ScheduleController";
 
@@ -25,9 +26,11 @@ const PORT           = Number(process.env.PORT           ?? 3001);
 const MQTT_URL       =        process.env.MQTT_URL        ?? "mqtt://localhost:1883";
 const MQTT_CLIENT_ID =        process.env.MQTT_CLIENT_ID ?? "alice-gateway";
 const FRONTEND_URL   =        process.env.FRONTEND_URL   ?? "http://localhost:3000";
+const NOTIFIER_URL   =        process.env.NOTIFIER_URL   ?? "http://localhost:3003";
 
 // ── AliceApiClient (debe inicializarse antes que SchedulerService) ─────────────
 initAliceApiClient(FRONTEND_URL);
+notifierClient.init(NOTIFIER_URL);
 
 // ── Express ───────────────────────────────────────────────────────────────────
 const app = express();
