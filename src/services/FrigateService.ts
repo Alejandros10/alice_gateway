@@ -150,8 +150,7 @@ class FrigateService {
     await this._refreshRule();
     await this._refreshMode();
 
-    if (!this.rule.enabled)    return;
-    if (!this._isActiveHour()) return;
+    if (!this.rule.enabled) return;
 
     let event: FrigateEventPayload;
     try {
@@ -174,34 +173,38 @@ class FrigateService {
     }
     if (!cameraRule.enabled || cameraRule.relayIds.length === 0) return;
 
-    const score   = event.after.top_score.toFixed(2);
-    const targets = cameraRule.relayIds.join(", ");
-    console.log(`[Frigate] Person on "${camera}" (${score}) → ON [${targets}]`);
+    const score = event.after.top_score.toFixed(2);
 
-    // Encender relés
-    for (const relayId of cameraRule.relayIds) {
-      relayService.turnOn(relayId).catch((err: Error) => {
-        console.error(`[Frigate] Error turning on "${relayId}":`, err.message);
-      });
+    // ── Relés: solo si es hora activa ────────────────────────────────────────
+    if (this._isActiveHour()) {
+      const targets = cameraRule.relayIds.join(", ");
+      console.log(`[Frigate] Person on "${camera}" (${score}) → ON [${targets}]`);
+
+      for (const relayId of cameraRule.relayIds) {
+        relayService.turnOn(relayId).catch((err: Error) => {
+          console.error(`[Frigate] Error turning on "${relayId}":`, err.message);
+        });
+      }
+
+      if (this.rule.autoOffSec > 0) {
+        const existing = this.autoOffTimers.get(camera);
+        if (existing) clearTimeout(existing);
+
+        const timer = setTimeout(() => {
+          console.log(`[Frigate] Auto-off "${camera}" after ${this.rule.autoOffSec}s`);
+          for (const relayId of cameraRule.relayIds) {
+            relayService.turnOff(relayId).catch(() => {});
+          }
+          this.autoOffTimers.delete(camera);
+        }, this.rule.autoOffSec * 1_000);
+
+        this.autoOffTimers.set(camera, timer);
+      }
+    } else {
+      console.log(`[Frigate] Person on "${camera}" (${score}) — fuera de hora activa, relés omitidos`);
     }
 
-    // Auto-apagado independiente por cámara
-    if (this.rule.autoOffSec > 0) {
-      const existing = this.autoOffTimers.get(camera);
-      if (existing) clearTimeout(existing);
-
-      const timer = setTimeout(() => {
-        console.log(`[Frigate] Auto-off "${camera}" after ${this.rule.autoOffSec}s`);
-        for (const relayId of cameraRule.relayIds) {
-          relayService.turnOff(relayId).catch(() => {});
-        }
-        this.autoOffTimers.delete(camera);
-      }, this.rule.autoOffSec * 1_000);
-
-      this.autoOffTimers.set(camera, timer);
-    }
-
-    // Notificación si estamos en modo "Ya volvemos"
+    // ── Notificación: siempre que esté en modo "Ya volvemos" ─────────────────
     if (this.houseMode === "away") {
       this._sendAlert(camera);
     }
