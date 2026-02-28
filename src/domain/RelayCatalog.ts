@@ -59,6 +59,7 @@ export const RELAY_CATALOG: RelayDefinition[] = [
 
   // ── Relés WiFi (NodeMCU / ESP8266) ────────────────────────────────────────
   // Agrega aquí tus NodeMCUs. El id debe coincidir con DEVICE_ID en el .ino
+  { id: "wifi-sala",    displayName: "Sala WiFi",     pin: "D1", type: "wifi" },
   // { id: "wifi-garaje",  displayName: "Garaje WiFi",   pin: "D1", type: "wifi" },
   // { id: "wifi-terraza", displayName: "Terraza WiFi",  pin: "D1", type: "wifi" },
 ];
