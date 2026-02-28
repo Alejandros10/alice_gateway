@@ -11,12 +11,15 @@
 import { RELAY_CATALOG } from "../domain/RelayCatalog";
 
 class RelayStateStore {
-  private state: Record<string, boolean> = {};
+  private state:  Record<string, boolean> = {};
+  private online: Record<string, boolean> = {};
 
   constructor() {
     // Todos los relés arrancan en OFF al iniciar el Gateway
     for (const relay of RELAY_CATALOG) {
       this.state[relay.id] = false;
+      // WiFi relays arrancan como offline hasta que el NodeMCU publique su estado
+      if (relay.type === "wifi") this.online[relay.id] = false;
     }
   }
 
@@ -33,6 +36,16 @@ class RelayStateStore {
   /** Actualiza el estado de un relé. */
   set(id: string, value: boolean): void {
     this.state[id] = value;
+  }
+
+  /** Devuelve el estado online de un relay WiFi. undefined si no aplica (GPIO). */
+  getOnline(id: string): boolean | undefined {
+    return this.online[id];
+  }
+
+  /** Actualiza el estado online de un relay WiFi. */
+  setOnline(id: string, value: boolean): void {
+    this.online[id] = value;
   }
 }
 

@@ -69,6 +69,7 @@ class RelayService {
       pin:         r.pin,
       type:        r.type ?? "gpio",
       state:       snapshot[r.id] ?? false,
+      ...(r.type === "wifi" ? { online: relayStateStore.getOnline(r.id) ?? false } : {}),
     }));
   }
 }

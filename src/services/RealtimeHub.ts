@@ -27,6 +27,7 @@ interface UpdatedEvent {
   type: "relay.updated";
   relay: string;
   state: boolean;
+  online?: boolean;
   timestamp: string;
 }
 
@@ -80,11 +81,12 @@ class RealtimeHub {
   }
 
   /** Shortcut para emitir relay.updated (el evento más frecuente). */
-  broadcastRelayUpdate(relayId: string, state: boolean): void {
+  broadcastRelayUpdate(relayId: string, state: boolean, online?: boolean): void {
     this.broadcast({
       type: "relay.updated",
       relay: relayId,
       state,
+      ...(online !== undefined ? { online } : {}),
       timestamp: new Date().toISOString(),
     });
   }

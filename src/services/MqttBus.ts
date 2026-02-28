@@ -175,7 +175,8 @@ class MqttBus {
         const relayId = parts[2];
         const online  = data.online ?? true;
         relayStateStore.set(relayId, data.state);
-        realtimeHub.broadcastRelayUpdate(relayId, data.state);
+        relayStateStore.setOnline(relayId, online);
+        realtimeHub.broadcastRelayUpdate(relayId, data.state, online);
         console.log(
           `[MQTT] WiFi "${relayId}" confirmed → ${data.state ? "ON" : "OFF"} | online: ${online}`
         );
