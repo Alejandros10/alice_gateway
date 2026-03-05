@@ -26,7 +26,8 @@
 import mqtt, { MqttClient } from "mqtt";
 import { relayStateStore } from "./RelayStateStore";
 import { realtimeHub } from "./RealtimeHub";
-import { RELAY_CATALOG } from "../domain/RelayCatalog";
+import { RELAY_CATALOG, findRelay } from "../domain/RelayCatalog";
+import { findMotionRule } from "../domain/MotionCatalog";
 
 // ── Topics GPIO ───────────────────────────────────────────────────────────────
 const TOPIC_GPIO_CMD       = (id: string) => `alice/relay/${id}/set`;
@@ -39,6 +40,9 @@ const TOPIC_STATUS         = "alice/system/gateway/status";
 const TOPIC_WIFI_CMD       = (id: string) => `alice/wifi/${id}/set`;
 const TOPIC_WIFI_STATE_SUB = "alice/wifi/+/state";
 
+// ── Topics Movimiento (Arduino + RPi bridge) ──────────────────────────────────
+const TOPIC_MOTION_SUB     = "alice/motion/+";
+
 // ── Otros ─────────────────────────────────────────────────────────────────────
 const TOPIC_FRIGATE_SUB    = "frigate/events";
 
@@ -47,6 +51,8 @@ type FrigateHandler = (topic: string, payload: Buffer) => void;
 class MqttBus {
   private client: MqttClient | null = null;
   private _frigateHandlers: FrigateHandler[] = [];
+  /** Timers de auto-apagado por sensor. Se resetean con cada detección. */
+  private _motionTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   connect(brokerUrl: string, clientId = "alice-gateway"): void {
     this.client = mqtt.connect(brokerUrl, {
@@ -71,12 +77,13 @@ class MqttBus {
           TOPIC_GPIO_STATE_SUB,
           TOPIC_ALL_STATE_SUB,
           TOPIC_WIFI_STATE_SUB,   // ← estados de NodeMCUs
+          TOPIC_MOTION_SUB,       // ← sensores de movimiento (Arduino + RPi bridge)
           TOPIC_FRIGATE_SUB,
         ],
         { qos: 1 },
         (err) => {
           if (err) console.error("[MQTT] Subscribe error:", err.message);
-          else     console.log("[MQTT] Subscribed → GPIO states + WiFi states + Frigate");
+          else     console.log("[MQTT] Subscribed → GPIO states + WiFi states + Motion + Frigate");
         }
       );
     });
@@ -123,6 +130,54 @@ class MqttBus {
     console.log(`[MQTT] WiFi Cmd → ${TOPIC_WIFI_CMD(relayId)}: ${payload}`);
   }
 
+  // ── Movimiento ────────────────────────────────────────────────────────────
+
+  /**
+   * Enciende el relay mapeado al sensor y programa el auto-apagado.
+   * Si llega otro evento antes del timeout, resetea el timer.
+   */
+  private _handleMotion(sensorId: string): void {
+    const rule = findMotionRule(sensorId);
+    if (!rule) {
+      console.warn(`[Motion] Sin regla para sensor "${sensorId}" — ignorado`);
+      return;
+    }
+
+    const relay = findRelay(rule.relayId);
+    if (!relay) {
+      console.warn(`[Motion] Relay "${rule.relayId}" no existe en el catálogo`);
+      return;
+    }
+
+    console.log(`[Motion] ${rule.displayName} → encendiendo "${rule.relayId}" (auto-off ${rule.autoOffSecs}s)`);
+
+    // Encender relay
+    this._triggerRelay(relay.id, relay.pin, relay.type === "wifi", true);
+
+    // Resetear timer de auto-apagado
+    const existing = this._motionTimers.get(sensorId);
+    if (existing) clearTimeout(existing);
+
+    const timer = setTimeout(() => {
+      console.log(`[Motion] Auto-off "${rule.relayId}" (${rule.autoOffSecs}s sin movimiento)`);
+      this._triggerRelay(relay.id, relay.pin, relay.type === "wifi", false);
+      this._motionTimers.delete(sensorId);
+    }, rule.autoOffSecs * 1_000);
+
+    this._motionTimers.set(sensorId, timer);
+  }
+
+  /** Publica el comando al relay correcto según su tipo (GPIO o WiFi). */
+  private _triggerRelay(relayId: string, pin: string, isWifi: boolean, state: boolean): void {
+    if (isWifi) {
+      this.publishWifiCommand(relayId, state);
+    } else {
+      this.publishCommand(relayId, pin, state);
+    }
+    relayStateStore.set(relayId, state);
+    realtimeHub.broadcastRelayUpdate(relayId, state);
+  }
+
   // ── Frigate ───────────────────────────────────────────────────────────────
 
   addFrigateHandler(fn: FrigateHandler): void {
@@ -144,6 +199,13 @@ class MqttBus {
     // Frigate
     if (topic.startsWith("frigate/")) {
       for (const fn of this._frigateHandlers) fn(topic, payloadBuf);
+      return;
+    }
+
+    // Movimiento: alice/motion/{sensorId}
+    if (topic.startsWith("alice/motion/")) {
+      const sensorId = topic.split("/")[2];
+      if (sensorId) this._handleMotion(sensorId);
       return;
     }
 

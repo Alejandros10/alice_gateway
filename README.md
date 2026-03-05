@@ -1,35 +1,38 @@
 # alice_gateway
 
-Gateway central del sistema Alice. Actúa como intermediario entre la interfaz web y el controlador GPIO de la Raspberry Pi. Expone una API REST y un canal WebSocket para actualizaciones en tiempo real.
+Gateway central del sistema Alice. Orquesta el control de relés GPIO y WiFi, sensores de movimiento, programación horaria e integración con Frigate. Expone una API REST y un canal WebSocket para el frontend.
 
 ---
 
-## Rol en la arquitectura
+## Arquitectura
 
 ```
 alice_home_controller_front  (:3000)
+            │  HTTP + WebSocket
+     alice_gateway  (:3001)          ← este servicio
             │
-     alice_gateway  (:3001)        ← este servicio
-       HTTP + WebSocket
+            ├── MQTT ──► Mosquitto (:1883)
+            │               ├── alice_gpio_API_controller (:8000)  [Raspberry Pi - GPIO]
+            │               ├── NodeMCU / ESP8266                  [Relés WiFi]
+            │               └── motion_bridge.py                   [Arduino → sensores PIR]
             │
-alice_gpio_API_contoller  (:8000)
-         (Raspberry Pi)
+            ├── HTTP ──► alice_notifier (:3003)
+            └── HTTP ──► Frigate (:5000)
 ```
-
-Este servicio es el **único punto de entrada** para el frontend. Nunca debe saltarse para llamar al controlador GPIO directamente.
 
 ---
 
-## Tecnologias
+## Tecnologías
 
-| Componente  | Version  | Descripcion                          |
-|-------------|----------|--------------------------------------|
-| Node.js     | 18+      | Entorno de ejecucion                 |
-| TypeScript  | 5.4+     | Lenguaje                             |
-| Express     | 4.19+    | Servidor HTTP / router REST          |
-| ws          | 8.17+    | WebSocket server                     |
-| Axios       | 1.7+     | Cliente HTTP hacia el GPIO API       |
-| ts-node-dev | 2.0+     | Hot reload en desarrollo             |
+| Componente    | Versión | Descripción                              |
+|---------------|---------|------------------------------------------|
+| Node.js       | 18+     | Entorno de ejecución                     |
+| TypeScript    | 5.4+    | Lenguaje                                 |
+| Express       | 4.19+   | Servidor HTTP / router REST              |
+| ws            | 8.17+   | WebSocket server                         |
+| mqtt          | 5+      | Cliente MQTT (Mosquitto)                 |
+| node-cron     | 3+      | Programación de tareas horarias          |
+| ts-node-dev   | 2.0+    | Hot reload en desarrollo                 |
 
 ---
 
@@ -38,16 +41,24 @@ Este servicio es el **único punto de entrada** para el frontend. Nunca debe sal
 ```
 alice_gateway/
 ├── src/
-│   ├── index.ts                    # Entry point — HTTP + WebSocket
+│   ├── index.ts                      # Entry point — HTTP + WebSocket + MQTT
 │   ├── domain/
-│   │   └── RelayCatalog.ts         # Catalogo de 17 reles con nombres de sala
+│   │   ├── RelayCatalog.ts           # Catálogo de relés GPIO y WiFi
+│   │   └── MotionCatalog.ts          # Mapeo sensor de movimiento → relay
 │   ├── api/
-│   │   └── RelayController.ts      # Rutas Express (/api/relays/...)
+│   │   ├── RelayController.ts        # Rutas /api/relays/...
+│   │   └── ScheduleController.ts     # Rutas /api/schedules/...
 │   └── services/
-│       ├── RelayService.ts         # Logica de negocio y orquestacion
-│       ├── RaspberryRelayClient.ts # Cliente HTTP hacia alice_gpio_API_contoller
-│       ├── RelayStateStore.ts      # Estado en memoria (todos los reles)
-│       └── RealtimeHub.ts          # WebSocket hub (broadcast a clientes)
+│       ├── MqttBus.ts                # MQTT: publica comandos, suscribe estados
+│       ├── RelayService.ts           # Lógica de negocio relay
+│       ├── RelayStateStore.ts        # Estado en memoria (relés + online WiFi)
+│       ├── RealtimeHub.ts            # WebSocket hub (broadcast a clientes)
+│       ├── SchedulerService.ts       # Programación horaria de relés
+│       ├── FrigateService.ts         # Integración con Frigate (cámaras)
+│       ├── NotifierClient.ts         # Cliente HTTP → alice_notifier
+│       ├── AliceApiClient.ts         # Cliente HTTP → frontend
+│       └── RaspberryRelayClient.ts   # Cliente HTTP → alice_gpio_API_controller
+├── motion_bridge.py                  # Script Python para Raspberry Pi (Arduino → MQTT)
 ├── package.json
 ├── tsconfig.json
 └── .env
@@ -55,129 +66,157 @@ alice_gateway/
 
 ---
 
-## Catalogo de reles
+## Catálogo de relés
 
-Definido en [src/domain/RelayCatalog.ts](src/domain/RelayCatalog.ts). Cada rele tiene un `id` (usado en URLs), un `displayName` (mostrado en la UI) y un `pin` (nombre GPIO para el controlador).
+Definido en [src/domain/RelayCatalog.ts](src/domain/RelayCatalog.ts).
+
+### GPIO (Raspberry Pi)
 
 | ID                | Nombre UI        | Pin GPIO |
 |-------------------|------------------|----------|
+| escalas           | Escalas          | gpio5    |
+| reflectores       | Reflectores      | gpio7    |
+| habitacion        | Habitacion       | gpio18   |
+| corredores        | Corredores       | gpio19   |
+| estudio           | Estudio          | gpio8    |
+| corredorese       | Corredores 2     | gpio10   |
+| sala              | Sala             | gpio23   |
+| hab-noche         | Hab Noche        | gpio24   |
+| cocina            | Cocina           | gpio26   |
 | entrada           | Entrada          | gpio4    |
-| cocina            | Cocina           | gpio5    |
-| sala              | Sala             | gpio6    |
+| bodega            | Bodega           | gpio9    |
+| porton            | Portón           | gpio11   |
 | comedor           | Comedor          | gpio12   |
 | dormitorio-1      | Dormitorio 1     | gpio13   |
+| alarma            | Alarma           | gpio14   |
+| bomba-agua        | Bomba Agua       | gpio15   |
 | dormitorio-2      | Dormitorio 2     | gpio16   |
 | dormitorio-3      | Dormitorio 3     | gpio17   |
-| bano-1            | Bano 1           | gpio18   |
-| bano-2            | Bano 2           | gpio19   |
 | pasillo           | Pasillo          | gpio20   |
-| lavanderia        | Lavanderia       | gpio21   |
+| lavanderia        | Lavandería       | gpio21   |
 | garaje            | Garaje           | gpio22   |
-| luz-garaje        | Luz Garaje       | gpio23   |
-| jardin            | Jardin           | gpio24   |
 | exterior-frente   | Exterior Frente  | gpio25   |
-| exterior-fondo    | Exterior Fondo   | gpio26   |
 | terraza           | Terraza          | gpio27   |
+
+### WiFi (NodeMCU / ESP8266)
+
+| ID         | Nombre UI  | Dispositivo |
+|------------|------------|-------------|
+| wifi-sala  | Sala WiFi  | NodeMCU D1  |
+
+Para agregar un relay WiFi nuevo: flashear el NodeMCU con `alice_nodemcu/` y agregar la entrada en `RelayCatalog.ts`.
+
+---
+
+## Sensores de movimiento
+
+Definidos en [src/domain/MotionCatalog.ts](src/domain/MotionCatalog.ts).
+
+El Arduino (conectado por USB a la Raspberry Pi) lee los sensores PIR y escribe por Serial. El script `motion_bridge.py` actúa como puente Serial → MQTT. El gateway suscribe el topic `alice/motion/+` y activa el relay configurado con auto-apagado.
+
+```
+PIR → Arduino → Serial "MOTION:sensor-1"
+              → motion_bridge.py (RPi)
+              → MQTT alice/motion/sensor-1
+              → Gateway → relay "pasillo" (auto-off 60s)
+```
+
+Para cambiar qué relay enciende cada sensor, editar `MotionCatalog.ts`:
+
+```ts
+{ sensorId: "sensor-1", relayId: "pasillo", autoOffSecs: 60 },
+{ sensorId: "sensor-2", relayId: "entrada", autoOffSecs: 30 },
+```
+
+### Correr motion_bridge.py en la Raspberry Pi
+
+```bash
+pip3 install pyserial paho-mqtt --break-system-packages
+python3 motion_bridge.py
+```
+
+Como servicio systemd:
+
+```bash
+sudo tee /etc/systemd/system/alice-motion.service << 'EOF'
+[Unit]
+Description=Alice Motion Bridge
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /home/alice/motion_bridge.py
+Restart=always
+RestartSec=5
+User=alice
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable alice-motion
+sudo systemctl start alice-motion
+sudo journalctl -u alice-motion -f
+```
+
+---
+
+## MQTT — Topics
+
+### Publicados por el Gateway
+
+| Topic                    | Payload                            | Descripción                  |
+|--------------------------|------------------------------------|------------------------------|
+| `alice/relay/{id}/set`   | `{ "pin": "gpio26", "state": true }` | Comando GPIO individual    |
+| `alice/relay/all/set`    | `{ "state": true }`                | Comando GPIO todos           |
+| `alice/wifi/{id}/set`    | `{ "state": true }`                | Comando WiFi (NodeMCU)       |
+| `alice/system/gateway/status` | `"online"` / `"offline"` (LWT) | Estado del gateway       |
+
+### Suscritos por el Gateway
+
+| Topic                    | Payload                                    | Descripción                   |
+|--------------------------|--------------------------------------------|-------------------------------|
+| `alice/relay/+/state`    | `{ "state": bool }`                        | Estado confirmado GPIO        |
+| `alice/relay/all/state`  | `{ "state": bool }`                        | Estado bulk GPIO              |
+| `alice/wifi/+/state`     | `{ "state": bool, "online": bool }`        | Estado WiFi + presencia       |
+| `alice/motion/+`         | `{ "motion": true }`                       | Evento de movimiento          |
+| `frigate/events`         | JSON Frigate                               | Eventos de detección          |
 
 ---
 
 ## API REST
 
-**Base URL:** `http://localhost:3001`
+**Base URL:** `http://192.168.1.4:3001`
 
----
+### Relés
 
-### `GET /api/relays`
-Retorna todos los reles del catalogo con su estado actual.
+| Método | Endpoint                  | Descripción                     |
+|--------|---------------------------|---------------------------------|
+| GET    | `/api/relays`             | Lista todos los relés con estado|
+| POST   | `/api/relays/:id/on`      | Enciende un relé                |
+| POST   | `/api/relays/:id/off`     | Apaga un relé                   |
+| POST   | `/api/relays/all/on`      | Enciende todos                  |
+| POST   | `/api/relays/all/off`     | Apaga todos                     |
 
-**Response:**
-```json
-{
-  "relays": [
-    { "id": "cocina", "displayName": "Cocina", "pin": "gpio5", "state": false },
-    { "id": "sala",   "displayName": "Sala",   "pin": "gpio6", "state": true  }
-  ]
-}
-```
+### Schedules
 
----
+| Método | Endpoint                  | Descripción                     |
+|--------|---------------------------|---------------------------------|
+| GET    | `/api/schedules`          | Lista tareas programadas        |
+| POST   | `/api/schedules`          | Crea tarea programada           |
+| DELETE | `/api/schedules/:id`      | Elimina tarea                   |
 
-### `GET /api/relays/state`
-Retorna un snapshot plano `{ id: boolean }`. Util para sincronizacion rapida.
-
-**Response:**
-```json
-{
-  "cocina": false,
-  "sala": true,
-  "dormitorio-1": false
-}
-```
-
----
-
-### `POST /api/relays/:id/on`
-Enciende un rele por su ID logico.
+### Health
 
 ```
-POST /api/relays/cocina/on
+GET /health
 ```
-
-**Response exitosa (`200`):**
-```json
-{ "ok": true, "relay": "cocina", "state": true }
-```
-
-**Errores:**
-| Codigo | Causa |
-|--------|-------|
-| `404`  | El ID no existe en el catalogo |
-| `502`  | La Raspberry no respondio o fallo el hardware |
-
----
-
-### `POST /api/relays/:id/off`
-Apaga un rele por su ID logico.
-
-```
-POST /api/relays/sala/off
-```
-
-**Response exitosa (`200`):**
-```json
-{ "ok": true, "relay": "sala", "state": false }
-```
-
----
-
-### `POST /api/relays/all/on`
-Enciende todos los reles del catalogo.
-
-**Response exitosa (`200`):**
-```json
-{ "ok": true, "state": true }
-```
-
----
-
-### `POST /api/relays/all/off`
-Apaga todos los reles del catalogo.
-
-**Response exitosa (`200`):**
-```json
-{ "ok": true, "state": false }
-```
-
----
-
-### `GET /health`
-Health check del gateway.
-
-**Response:**
 ```json
 {
   "ok": true,
   "ws_clients": 2,
+  "mqtt_connected": true,
+  "scheduler_jobs": 3,
   "uptime": 3600.5
 }
 ```
@@ -186,121 +225,79 @@ Health check del gateway.
 
 ## WebSocket
 
-El WebSocket comparte el mismo puerto que HTTP (`3001`). Al conectarse, el cliente recibe inmediatamente el estado actual. Cualquier cambio posterior se difunde a todos los clientes conectados.
+Comparte el puerto `3001` con HTTP.
 
-**Conectar:**
 ```js
-const ws = new WebSocket("ws://localhost:3001");
+const ws = new WebSocket("ws://192.168.1.4:3001");
 ```
 
-**Evento `relay.snapshot`** — enviado al conectarse:
+### Eventos recibidos
+
+**`relay.snapshot`** — al conectarse, estado completo:
 ```json
 {
   "type": "relay.snapshot",
-  "payload": {
-    "cocina": false,
-    "sala": true,
-    "dormitorio-1": false
-  }
+  "payload": { "cocina": false, "sala": true }
 }
 ```
 
-**Evento `relay.updated`** — enviado tras cada cambio de estado:
+**`relay.updated`** — tras cada cambio:
 ```json
 {
   "type": "relay.updated",
   "relay": "cocina",
   "state": true,
+  "online": true,
   "timestamp": "2025-01-15T10:30:00.000Z"
 }
 ```
 
----
-
-## Flujo interno de una operacion
-
-Cuando el frontend llama `POST /api/relays/cocina/on`, el gateway ejecuta:
-
-```
-RelayController
-      │  valida que "cocina" existe en RelayCatalog
-      ▼
-RelayService.turnOn("cocina")
-      │
-      ├─► RaspberryRelayClient.setState("gpio5", true)
-      │         POST http://192.168.1.2:8000/api/relay/set
-      │         { "name": "gpio5", "state": true }
-      │
-      ├─► RelayStateStore.set("cocina", true)
-      │
-      └─► RealtimeHub.broadcastRelayUpdate("cocina", true)
-                WS → { type: "relay.updated", relay: "cocina", state: true }
-```
+> El campo `online` solo aplica a relés WiFi (NodeMCU). Cuando es `false`, el dispositivo está desconectado y la UI muestra el relay deshabilitado.
 
 ---
 
 ## Variables de entorno
 
-Archivo `.env` en la raiz del proyecto:
-
 ```env
 # Puerto del gateway (HTTP + WebSocket comparten el mismo)
 PORT=3001
 
-# URL base del controlador FastAPI en la Raspberry Pi
+# Broker MQTT
+MQTT_URL=mqtt://192.168.1.4:1883
+MQTT_CLIENT_ID=alice-gateway
+
+# Controlador GPIO en la Raspberry Pi (fallback / debug)
 RASPBERRY_URL=http://192.168.1.2:8000
+
+# URL del frontend (para AliceApiClient)
+FRONTEND_URL=http://192.168.1.4:3000
+
+# Servicios auxiliares
+NOTIFIER_URL=http://192.168.1.4:3003
+FRIGATE_URL=http://192.168.1.4:5000
 ```
 
-## Instalacion y ejecucion
+---
 
-### Requisitos previos
-
-- Node.js 18 o superior
-- npm 9 o superior
-
-### 1. Instalar dependencias
+## Instalación y ejecución
 
 ```bash
 cd alice_gateway
 npm install
 ```
 
-### 2. Configurar variables de entorno
-
-```bash
-cp .env .env.local   # o editar .env directamente
-```
-
-Verificar que `RASPBERRY_URL` apunta a la IP correcta de la Raspberry Pi.
-
-### 3. Ejecutar
-
-**Modo desarrollo** (hot reload con ts-node-dev):
-
+**Desarrollo** (hot reload):
 ```bash
 npm run dev
 ```
 
-**Modo produccion** (compilar TypeScript primero):
-
+**Producción:**
 ```bash
 npm run build
 npm start
 ```
 
-La salida al arrancar:
-
-```
-─────────────────────────────────────────
-  Alice Gateway
-  HTTP  →  http://localhost:3001
-  WS    →  ws://localhost:3001
-─────────────────────────────────────────
-```
-
----
-
-### 4. Ejecutar como servicio systemd (produccion en servidor Linux)
+### Como servicio systemd (servidor Ubuntu)
 
 ```bash
 sudo nano /etc/systemd/system/alice-gateway.service
@@ -312,8 +309,8 @@ Description=Alice Gateway
 After=network.target
 
 [Service]
-User=pi
-WorkingDirectory=/home/pi/alice/alice_gateway
+User=alice
+WorkingDirectory=/home/alice/alice_gateway
 ExecStart=/usr/bin/node dist/index.js
 Restart=always
 RestartSec=5
@@ -324,50 +321,47 @@ WantedBy=multi-user.target
 ```
 
 ```bash
-# Compilar antes de activar el servicio
 npm run build
-
 sudo systemctl daemon-reload
-sudo systemctl enable alice-gateway
-sudo systemctl start alice-gateway
-
-# Ver logs en tiempo real
-sudo journalctl -u alice-gateway -f
+sudo systemctl enable alicia-api
+sudo systemctl start alicia-api
+sudo journalctl -u alicia-api -f
 ```
 
 ---
 
-## Pruebas rapidas con curl
+## Pruebas rápidas con curl
 
 ```bash
-# Listar todos los reles con estado
-curl http://localhost:3001/api/relays
+# Estado de todos los relés
+curl http://192.168.1.4:3001/api/relays
 
-# Snapshot de estados
-curl http://localhost:3001/api/relays/state
+# Encender relay
+curl -X POST http://192.168.1.4:3001/api/relays/cocina/on
 
-# Encender cocina
-curl -X POST http://localhost:3001/api/relays/cocina/on
-
-# Apagar sala
-curl -X POST http://localhost:3001/api/relays/sala/off
+# Apagar relay
+curl -X POST http://192.168.1.4:3001/api/relays/sala/off
 
 # Encender todos
-curl -X POST http://localhost:3001/api/relays/all/on
+curl -X POST http://192.168.1.4:3001/api/relays/all/on
 
-# Apagar todos
-curl -X POST http://localhost:3001/api/relays/all/off
+# Simular evento de movimiento (para pruebas sin Arduino)
+mosquitto_pub -h 192.168.1.4 -t alice/motion/sensor-1 -m '{"motion":true}'
 
 # Health check
-curl http://localhost:3001/health
+curl http://192.168.1.4:3001/health
 ```
 
 ---
 
 ## Scripts disponibles
 
-| Script          | Comando         | Descripcion                              |
-|-----------------|-----------------|------------------------------------------|
-| `npm run dev`   | ts-node-dev     | Desarrollo con hot reload                |
-| `npm run build` | tsc             | Compilar TypeScript a dist/              |
-| `npm start`     | node dist/index | Produccion (requiere build previo)       |
+| Script          | Descripción                              |
+|-----------------|------------------------------------------|
+| `npm run dev`   | Desarrollo con hot reload (ts-node-dev)  |
+| `npm run build` | Compila TypeScript → dist/               |
+| `npm start`     | Producción (requiere build previo)       |
+
+
+
+alicia-api.service        loaded active running GPIOService FastAPI (Alicia)
