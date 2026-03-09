@@ -51,7 +51,7 @@ def find_arduino_port() -> str:
     return SERIAL_PORT
 
 
-def on_connect(client, userdata, flags, rc):
+def on_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
         print(f"[MQTT] Conectado a {BROKER}:{BROKER_PORT}")
     else:
@@ -60,7 +60,7 @@ def on_connect(client, userdata, flags, rc):
 
 def main():
     # MQTT
-    client = mqtt.Client(client_id=CLIENT_ID)
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=CLIENT_ID)
     client.on_connect = on_connect
     client.connect(BROKER, BROKER_PORT, keepalive=60)
     client.loop_start()

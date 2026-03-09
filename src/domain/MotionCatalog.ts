@@ -23,14 +23,14 @@ export interface MotionRule {
 export const MOTION_CATALOG: MotionRule[] = [
   {
     sensorId:    "sensor-1",
-    displayName: "Sensor Pasillo",
-    relayId:     "pasillo",
+    displayName: "Sensor escalas",
+    relayId:     "escalas",
     autoOffSecs: 60,
   },
   {
     sensorId:    "sensor-2",
-    displayName: "Sensor Entrada",
-    relayId:     "entrada",
+    displayName: "Sensor bano",
+    relayId:     "bano",
     autoOffSecs: 30,
   },
 ];
