@@ -110,7 +110,13 @@ class FrigateService {
       hour:     "numeric",
       hour12:   false,
     }).format(new Date());
-    return parseInt(hourStr, 10) >= this.rule.activeAfterHour;
+    const hour  = parseInt(hourStr, 10);
+    const start = this.rule.activeAfterHour;
+    const end   = this.rule.activeUntilHour;
+    // Cruce de medianoche (ej: 18→06): activo si hour >= 18 OR hour < 6
+    if (start > end) return hour >= start || hour < end;
+    // Mismo día (ej: 08→20)
+    return hour >= start && hour < end;
   }
 
   // ── Notificación de alerta ────────────────────────────────────────────────

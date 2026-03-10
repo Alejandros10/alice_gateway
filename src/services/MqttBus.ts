@@ -28,6 +28,7 @@ import { relayStateStore } from "./RelayStateStore";
 import { realtimeHub } from "./RealtimeHub";
 import { RELAY_CATALOG, findRelay } from "../domain/RelayCatalog";
 import { findMotionRule } from "../domain/MotionCatalog";
+import { aliceApi, MotionSensorsRule } from "./AliceApiClient";
 
 // ── Topics GPIO ───────────────────────────────────────────────────────────────
 const TOPIC_GPIO_CMD       = (id: string) => `alice/relay/${id}/set`;
@@ -48,11 +49,22 @@ const TOPIC_FRIGATE_SUB    = "frigate/events";
 
 type FrigateHandler = (topic: string, payload: Buffer) => void;
 
+const MOTION_RULE_CACHE_TTL = 60_000;
+
+const DEFAULT_MOTION_RULE: MotionSensorsRule = {
+  enabled:         true,
+  activeAfterHour: 18,
+  activeUntilHour: 6,
+};
+
 class MqttBus {
   private client: MqttClient | null = null;
   private _frigateHandlers: FrigateHandler[] = [];
   /** Timers de auto-apagado por sensor. Se resetean con cada detección. */
   private _motionTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+
+  private _motionRule: MotionSensorsRule = { ...DEFAULT_MOTION_RULE };
+  private _motionRuleLastFetched         = 0;
 
   connect(brokerUrl: string, clientId = "alice-gateway"): void {
     this.client = mqtt.connect(brokerUrl, {
@@ -132,11 +144,46 @@ class MqttBus {
 
   // ── Movimiento ────────────────────────────────────────────────────────────
 
+  private async _refreshMotionRule(): Promise<void> {
+    const now = Date.now();
+    if (now - this._motionRuleLastFetched < MOTION_RULE_CACHE_TTL) return;
+    try {
+      const rule = await aliceApi().getMotionSensorsRule();
+      if (rule) this._motionRule = rule;
+      this._motionRuleLastFetched = now;
+    } catch { /* mantiene regla cacheada */ }
+  }
+
+  private _isMotionActiveHour(): boolean {
+    const hourStr = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Bogota",
+      hour:     "numeric",
+      hour12:   false,
+    }).format(new Date());
+    const hour  = parseInt(hourStr, 10);
+    const start = this._motionRule.activeAfterHour;
+    const end   = this._motionRule.activeUntilHour;
+    if (start > end) return hour >= start || hour < end;
+    return hour >= start && hour < end;
+  }
+
   /**
    * Enciende el relay mapeado al sensor y programa el auto-apagado.
    * Si llega otro evento antes del timeout, resetea el timer.
    */
-  private _handleMotion(sensorId: string): void {
+  private async _handleMotion(sensorId: string): Promise<void> {
+    await this._refreshMotionRule();
+
+    if (!this._motionRule.enabled) {
+      console.log(`[Motion] Sensores desactivados — "${sensorId}" ignorado`);
+      return;
+    }
+
+    if (!this._isMotionActiveHour()) {
+      console.log(`[Motion] Fuera de horario activo — "${sensorId}" ignorado`);
+      return;
+    }
+
     const rule = findMotionRule(sensorId);
     if (!rule) {
       console.warn(`[Motion] Sin regla para sensor "${sensorId}" — ignorado`);
@@ -205,7 +252,9 @@ class MqttBus {
     // Movimiento: alice/motion/{sensorId}
     if (topic.startsWith("alice/motion/")) {
       const sensorId = topic.split("/")[2];
-      if (sensorId) this._handleMotion(sensorId);
+      if (sensorId) this._handleMotion(sensorId).catch((err) =>
+        console.error("[Motion] Unhandled error:", err)
+      );
       return;
     }
 

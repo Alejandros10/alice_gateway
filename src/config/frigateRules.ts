@@ -19,16 +19,18 @@ export interface FrigateCameraRule {
 }
 
 export interface FrigateDetectionRule {
-  enabled:         boolean;
-  activeAfterHour: number;
-  autoOffSec:      number;
-  cameras:         Record<string, FrigateCameraRule>;
+  enabled:          boolean;
+  activeAfterHour:  number;
+  activeUntilHour:  number;
+  autoOffSec:       number;
+  cameras:          Record<string, FrigateCameraRule>;
 }
 
 export const DEFAULT_FRIGATE_RULE: FrigateDetectionRule = {
-  enabled:         true,
-  activeAfterHour: 18,
-  autoOffSec:      300,
+  enabled:          true,
+  activeAfterHour:  18,
+  activeUntilHour:  6,
+  autoOffSec:       300,
   cameras: {
     camara_fronta:  { enabled: true, relayIds: ["entrada",  "corredores"] },
     camara_trasera: { enabled: true, relayIds: ["terraza",  "reflectores"] },

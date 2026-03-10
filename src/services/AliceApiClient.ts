@@ -15,6 +15,12 @@ import axios, { AxiosInstance } from "axios";
 import type { FrigateDetectionRule } from "../config/frigateRules";
 export type { FrigateDetectionRule };
 
+export interface MotionSensorsRule {
+  enabled:         boolean;
+  activeAfterHour: number;
+  activeUntilHour: number;
+}
+
 // ── DTOs (espejo de los tipos definidos en Next.js) ────────────────────────────
 
 export interface ScheduleDto {
@@ -69,6 +75,21 @@ class AliceApiClient {
     try {
       const { data } = await this.http.get<{ rule: FrigateDetectionRule }>(
         "/api/automations/frigate-detection"
+      );
+      return data.rule;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Lee la regla de sensores de movimiento desde la BD (via Next.js API).
+   * Retorna null si el endpoint no está disponible.
+   */
+  async getMotionSensorsRule(): Promise<MotionSensorsRule | null> {
+    try {
+      const { data } = await this.http.get<{ rule: MotionSensorsRule }>(
+        "/api/automations/motion-sensors"
       );
       return data.rule;
     } catch {
