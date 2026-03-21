@@ -102,7 +102,7 @@ Definido en [src/domain/RelayCatalog.ts](src/domain/RelayCatalog.ts).
 
 | ID         | Nombre UI  | Dispositivo |
 |------------|------------|-------------|
-| wifi-sala  | Sala WiFi  | NodeMCU D1  |
+| wifi-garaje | Garaje WiFi | NodeMCU D1  |
 
 Para agregar un relay WiFi nuevo: flashear el NodeMCU con `alice_nodemcu/` y agregar la entrada en `RelayCatalog.ts`.
 
